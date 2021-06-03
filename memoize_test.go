@@ -80,11 +80,6 @@ func fib(n uint64) uint64 {
 	}
 }
 
-func TestFibNoMemoize(t *testing.T) {
-	lastValue2 := fib(47)
-	fmt.Println("lastValue1", lastValue2)
-}
-
 func TestSimple(t *testing.T) {
 	fmt.Println("hola Mundo")
 
