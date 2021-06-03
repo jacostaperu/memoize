@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jacostaperu/mygql/graph/memoize"
+	"github.com/jacostaperu/memoize"
 )
 
 func TestPanic(t *testing.T) {
