@@ -2,8 +2,14 @@
 package memoize
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"reflect"
 	"sync"
+	"time"
+
+	"github.com/patrickmn/go-cache"
+	"golang.org/x/sync/singleflight"
 )
 
 var interfaceType = reflect.TypeOf(new(interface{})).Elem()
@@ -13,6 +19,15 @@ type call struct {
 	wait     <-chan struct{}
 	results  []reflect.Value
 	panicked reflect.Value
+}
+
+// Memoizer allows you to memoize function calls. Memoizer is safe for concurrent use by multiple goroutines.
+type Memoizer struct {
+
+	// Storage exposes the underlying cache of memoized results to manipulate as desired - for example, to Flush().
+	Storage *cache.Cache
+
+	group singleflight.Group
 }
 
 // Memoize takes a function and returns a function of the same type. The
@@ -30,18 +45,40 @@ type call struct {
 // cause a runtime panic if they are arguments to a memoized function.
 // See also: https://golang.org/ref/spec#Comparison_operators
 //
-// As a special case, variadic functions (func(x, y, ...z)) are allowed.
-func Memoize(fn interface{}) interface{} {
+
+// NewMemoizer creates a new Memoizer with the configured expiry and cleanup policies.
+// If desired, use cache.NoExpiration to cache values forever.
+func NewMemoizer(defaultExpiration, cleanupInterval time.Duration) *Memoizer {
+	return &Memoizer{
+		Storage: cache.New(defaultExpiration, cleanupInterval),
+		group:   singleflight.Group{},
+	}
+}
+
+//AsSha256 hash a function
+func AsSha256(o interface{}) string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%v", o)))
+
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+//Memoize   As a special case, variadic functions (func(x, y, ...z)) are allowed.
+func (m *Memoizer) Memoize(fn interface{}) interface{} {
 	v := reflect.ValueOf(fn)
+
 	t := v.Type()
 
 	keyType := reflect.ArrayOf(t.NumIn(), interfaceType)
-	cache := reflect.MakeMap(reflect.MapOf(keyType, valueType))
+	//cache := reflect.MakeMap(reflect.MapOf(keyType, valueType))
+	//will be replaces by cache := m.Storage
+
 	var mtx sync.Mutex
 
 	return reflect.MakeFunc(t, func(args []reflect.Value) (results []reflect.Value) {
 		key := reflect.New(keyType).Elem()
 		for i, v := range args {
+
 			if i == len(args)-1 && t.IsVariadic() {
 				a := reflect.New(reflect.ArrayOf(v.Len(), v.Type().Elem())).Elem()
 				for j, l := 0, v.Len(); j < l; j++ {
@@ -53,19 +90,43 @@ func Memoize(fn interface{}) interface{} {
 			key.Index(i).Set(reflect.ValueOf(&vi).Elem())
 		}
 		mtx.Lock()
-		val := cache.MapIndex(key)
-		if val.IsValid() {
+
+		mykey := AsSha256(key)
+
+		//fmt.Println("mykey -->", mykey, "<--")
+
+		//val := cache.MapIndex(key)
+		mval, found := m.Storage.Get(mykey)
+
+		if found {
 			mtx.Unlock()
-			c := val.Interface().(*call)
+
+			//fmt.Println("val", mval)
+			//fmt.Println("return cached value.")
+			//c := val.(*call)
+			c := mval.(reflect.Value).Interface().(*call)
+			//fmt.Println("val", c)
+
+			//c := val.Interface().(*call)
+
 			<-c.wait
 			if c.panicked.IsValid() {
 				panic(c.panicked.Interface())
 			}
 			return c.results
 		}
+		//fmt.Println("value not cached")
+
 		w := make(chan struct{})
 		c := &call{wait: w}
-		cache.SetMapIndex(key, reflect.ValueOf(c))
+		//cache.SetMapIndex(key, reflect.ValueOf(c))
+		m.Storage.Set(mykey, reflect.ValueOf(c), cache.DefaultExpiration)
+
+		//mvall, found := m.Storage.Get(mykey)
+		//myyval, _ := json.Marshal(mvall)
+		//fmt.Println("Value a Guardar            :", reflect.ValueOf(c))
+		//fmt.Println("Value a Guardado recuperado:", mvall)
+
 		mtx.Unlock()
 
 		panicked := true
