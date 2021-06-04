@@ -93,7 +93,7 @@ func (m *Memoizer) Memoize(fn interface{}) interface{} {
 
 		mykey := AsSha256(key)
 
-		//fmt.Println("mykey -->", mykey, "<--")
+		fmt.Println("mykey -->", mykey, "<--")
 
 		//val := cache.MapIndex(key)
 		mval, found := m.Storage.Get(mykey)
@@ -101,11 +101,11 @@ func (m *Memoizer) Memoize(fn interface{}) interface{} {
 		if found {
 			mtx.Unlock()
 
-			//fmt.Println("val", mval)
-			//fmt.Println("return cached value.")
+			fmt.Println("val", mval)
+			fmt.Println("return cached value.")
 			//c := val.(*call)
 			c := mval.(reflect.Value).Interface().(*call)
-			//fmt.Println("val", c)
+			fmt.Println("val", c)
 
 			//c := val.Interface().(*call)
 
@@ -115,7 +115,7 @@ func (m *Memoizer) Memoize(fn interface{}) interface{} {
 			}
 			return c.results
 		}
-		//fmt.Println("value not cached")
+		fmt.Println("value not cached")
 
 		w := make(chan struct{})
 		c := &call{wait: w}
