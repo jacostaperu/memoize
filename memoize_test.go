@@ -100,7 +100,7 @@ func TestSimple(t *testing.T) {
 
 	newFibo := cache.Memoize(newFib).(func(uint64) uint64)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 
 		fibbonaci := newFibo(uint64(i))
 		fmt.Printf("fib(%d)=%d\n", i, fibbonaci)
